@@ -6,21 +6,14 @@ import Testing
 struct test_appTests {
 
     @Test func refreshData_usesInjectedBankingFactory() async throws {
-        final class SpyAPI: BankingAPI {
-            func fetchAccounts() async throws -> [Account] {
-                [Account(name: "Injected", type: "Checking", balance: 10)]
-            }
-
-            func fetchTransactions() async throws -> [Transaction] {
-                [Transaction(merchant: "Injected Merchant", category: "", amount: -1, date: Date())]
-            }
-        }
-
         var selectedProvider: APIProvider?
         let dependencies = AppDependencies(
             makeBankingAPI: { provider in
                 selectedProvider = provider
-                return SpyAPI()
+                return MockBankingAPI(
+                    accounts: [Account(name: "Injected", type: "Checking", balance: 10)],
+                    transactions: [Transaction(merchant: "Injected Merchant", category: "", amount: -1, date: Date())]
+                )
             },
             cacheStore: InMemoryCacheStore(),
             makeLogger: { _ in TestLogger() }
@@ -36,9 +29,92 @@ struct test_appTests {
         #expect(viewModel.accounts.count == 1)
         #expect(viewModel.transactions.first?.category == "Misc")
     }
+
+    @Test func computeMetrics_calculatesExpectedValues() {
+        let viewModel = AppViewModel(dependencies: .test)
+        viewModel.accounts = [
+            Account(name: "Checking", type: "Checking", balance: 1000),
+            Account(name: "Savings", type: "Savings", balance: 5000),
+            Account(name: "Loan", type: "Loan", balance: -2000)
+        ]
+        viewModel.transactions = [
+            Transaction(merchant: "Payroll", category: "Income", amount: 4000, date: Date()),
+            Transaction(merchant: "Rent", category: "Housing", amount: -1000, date: Date()),
+            Transaction(merchant: "Groceries", category: "Food", amount: -500, date: Date())
+        ]
+
+        viewModel.computeMetrics()
+
+        #expect(decimalToDouble(viewModel.metrics.netWorth) == 4000)
+        #expect(abs(viewModel.metrics.savingsRate - 0.625) < 0.0001)
+        #expect(abs(viewModel.metrics.investmentRate - 0.375) < 0.0001)
+        #expect(decimalToDouble(viewModel.metrics.emergencyTarget) == 1500)
+    }
+
+    @Test func budgetAdjustments_applyExpectedMath() {
+        let viewModel = AppViewModel(dependencies: .test)
+
+        viewModel.budgetIncrease(byPercent: 10)
+        #expect(decimalToDouble(viewModel.budget.current) == 2200)
+
+        viewModel.budgetDecrease(byPercent: 10)
+        #expect(abs(decimalToDouble(viewModel.budget.current) - 1980) < 0.0001)
+    }
+
+    @Test func refreshData_appliesCategorizationRules() async {
+        let dependencies = AppDependencies(
+            makeBankingAPI: { _ in
+                MockBankingAPI(
+                    accounts: [],
+                    transactions: [
+                        Transaction(merchant: "Acme Grocery", category: "", amount: -25, date: Date()),
+                        Transaction(merchant: "Uber Trip", category: "", amount: -12, date: Date()),
+                        Transaction(merchant: "Unknown Merchant", category: "", amount: -5, date: Date()),
+                        Transaction(merchant: "Known Category", category: "Utilities", amount: -30, date: Date())
+                    ]
+                )
+            },
+            cacheStore: InMemoryCacheStore(),
+            makeLogger: { _ in TestLogger() }
+        )
+
+        let viewModel = AppViewModel(dependencies: dependencies)
+        await viewModel.refreshData()
+
+        #expect(viewModel.transactions.count == 4)
+        #expect(viewModel.transactions[0].category == "Groceries")
+        #expect(viewModel.transactions[1].category == "Transport")
+        #expect(viewModel.transactions[2].category == "Misc")
+        #expect(viewModel.transactions[3].category == "Utilities")
+    }
+}
+
+private extension AppDependencies {
+    static let test = AppDependencies(
+        makeBankingAPI: { _ in MockBankingAPI(accounts: [], transactions: []) },
+        cacheStore: InMemoryCacheStore(),
+        makeLogger: { _ in TestLogger() }
+    )
+}
+
+private struct MockBankingAPI: BankingAPI {
+    let accounts: [Account]
+    let transactions: [Transaction]
+
+    func fetchAccounts() async throws -> [Account] {
+        accounts
+    }
+
+    func fetchTransactions() async throws -> [Transaction] {
+        transactions
+    }
 }
 
 private final class TestLogger: Logger {
     func log(_ message: String) {}
     func error(_ message: String) {}
+}
+
+private func decimalToDouble(_ value: Decimal) -> Double {
+    NSDecimalNumber(decimal: value).doubleValue
 }
