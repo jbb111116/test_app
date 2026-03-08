@@ -1,17 +1,12 @@
-//
-//  PersonalFinanceApp.swift
-//  PersonalFinance
-//
-//  Created by Scaffold on 3/7/26.
-//
-
 import SwiftUI
 
 @main
 struct PersonalFinanceApp: App {
+    private let dependencies = AppDependencies.live
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: AppViewModel(dependencies: dependencies))
         }
     }
 }

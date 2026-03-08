@@ -1,18 +1,12 @@
-//
-//  ContentView.swift
-//  PersonalFinance
-//
-//  Created by Scaffold on 3/7/26.
-//
-
 import SwiftUI
 import Combine
 
-// Root ContentView for macOS app using MVVM architecture.
-// This view hosts the high-level navigation and injects environment objects.
-
 struct ContentView: View {
-    @StateObject private var appViewModel = AppViewModel()
+    @StateObject private var appViewModel: AppViewModel
+
+    init(viewModel: AppViewModel = AppViewModel()) {
+        _appViewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -28,8 +22,6 @@ struct ContentView: View {
         }
     }
 }
-
-// MARK: - Sidebar
 
 enum AppSection: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
@@ -62,8 +54,6 @@ struct SidebarView: View {
     }
 }
 
-// MARK: - Detail Content
-
 struct DetailContent: View {
     let selected: AppSection
     @EnvironmentObject private var app: AppViewModel
@@ -84,8 +74,6 @@ struct DetailContent: View {
     }
 }
 
-// MARK: - Dashboard and Feature Placeholder Views
-
 struct DashboardView: View {
     @EnvironmentObject private var app: AppViewModel
 
@@ -94,7 +82,6 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Overview").font(.largeTitle).bold()
 
-                // Health Check Status
                 GroupBox("Health Check") {
                     HStack {
                         Circle()
@@ -106,7 +93,6 @@ struct DashboardView: View {
                     }
                 }
 
-                // Key Metrics
                 GroupBox("Key Metrics") {
                     VStack(alignment: .leading, spacing: 8) {
                         MetricRow(title: "Net Worth", value: app.metrics.netWorthFormatted)
@@ -116,7 +102,6 @@ struct DashboardView: View {
                     }
                 }
 
-                // Agent Placeholder
                 GroupBox("Assistant") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(app.agent.summaryPlaceholder)
@@ -180,7 +165,7 @@ struct AccountsView: View {
 
 struct BudgetsView: View {
     @EnvironmentObject private var app: AppViewModel
-    @State private var canDecrease = false // enforced upward-only adjustments
+    @State private var canDecrease = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -211,18 +196,25 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Picker("API Provider", selection: Binding(get: { app.config.apiProvider }, set: { app.config.apiProvider = $0 })) {
+            Picker("API Provider", selection: Binding(get: { app.config.apiProvider }, set: { newProvider in
+                app.config.apiProvider = newProvider
+                Task {
+                    await app.refreshData()
+                    app.computeMetrics()
+                }
+            })) {
                 Text("Plaid").tag(APIProvider.plaid)
                 Text("Teller").tag(APIProvider.teller)
             }
+            Text("Switch providers to load provider-specific mock accounts and transactions.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Toggle("Verbose Logging", isOn: Binding(get: { app.config.verboseLogging }, set: { app.config.verboseLogging = $0 }))
             Toggle("Enable Cache", isOn: Binding(get: { app.config.enableCache }, set: { app.config.enableCache = $0 }))
         }
         .padding()
     }
 }
-
-// MARK: - Preview
 
 #Preview {
     ContentView()

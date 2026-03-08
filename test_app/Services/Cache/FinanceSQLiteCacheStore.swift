@@ -1,17 +1,7 @@
-//
-//  FinanceSQLiteCacheStore.swift
-//  PersonalFinance
-//
-//  Created by Scaffold on 3/7/26.
-//
-
 import Foundation
 import SQLite3
 
-// SQLite-backed key-value cache storing JSON blobs for simple persistence.
-// This mirrors the API of CacheStore in AppViewModel so it can be swapped in easily.
-
-final class FinanceSQLiteCacheStore {
+final class FinanceSQLiteCacheStore: CacheStoring {
     private var db: OpaquePointer?
     private let queue = DispatchQueue(label: "cache.sqlite.queue")
     private let path: String
@@ -24,7 +14,9 @@ final class FinanceSQLiteCacheStore {
         createSchema()
     }
 
-    deinit { sqlite3_close(db) }
+    deinit {
+        sqlite3_close(db)
+    }
 
     private func open() {
         if sqlite3_open(path, &db) != SQLITE_OK {
@@ -36,8 +28,6 @@ final class FinanceSQLiteCacheStore {
         let sql = "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value BLOB NOT NULL);"
         _ = exec(sql)
     }
-
-    // MARK: - Public API mirroring CacheStore
 
     func save(accounts: [Account]) {
         saveJSON(accounts, forKey: "accounts")
@@ -55,8 +45,6 @@ final class FinanceSQLiteCacheStore {
         loadJSON([Transaction].self, forKey: "transactions") ?? []
     }
 
-    // MARK: - Internals
-
     private func saveJSON<T: Encodable>(_ value: T, forKey key: String) {
         queue.sync {
             do {
@@ -71,8 +59,12 @@ final class FinanceSQLiteCacheStore {
     private func loadJSON<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
         queue.sync {
             guard let data = read(key: key) else { return nil }
-            do { return try JSONDecoder().decode(type, from: data) }
-            catch { print("[SQLiteCache] decode error: \(error)"); return nil }
+            do {
+                return try JSONDecoder().decode(type, from: data)
+            } catch {
+                print("[SQLiteCache] decode error: \(error)")
+                return nil
+            }
         }
     }
 
@@ -94,11 +86,9 @@ final class FinanceSQLiteCacheStore {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_text(stmt, 1, key, -1, SQLITE_TRANSIENT)
-        if sqlite3_step(stmt) == SQLITE_ROW {
-            if let blob = sqlite3_column_blob(stmt, 0) {
-                let size = Int(sqlite3_column_bytes(stmt, 0))
-                return Data(bytes: blob, count: size)
-            }
+        if sqlite3_step(stmt) == SQLITE_ROW, let blob = sqlite3_column_blob(stmt, 0) {
+            let size = Int(sqlite3_column_bytes(stmt, 0))
+            return Data(bytes: blob, count: size)
         }
         return nil
     }
@@ -114,6 +104,4 @@ final class FinanceSQLiteCacheStore {
     }
 }
 
-// Provide C constant for transient binding
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-
