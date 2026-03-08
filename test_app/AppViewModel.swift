@@ -1,17 +1,18 @@
+import Combine
 import Foundation
 import SwiftUI
-import Combine
 
 // MARK: - Config
 
 enum APIProvider: String, Codable, CaseIterable, Identifiable {
+    case mock
     case plaid
     case teller
     var id: String { rawValue }
 }
 
 @Observable class AppConfig {
-    var apiProvider: APIProvider = .plaid
+    var apiProvider: APIProvider = .mock
     var verboseLogging: Bool = true
     var enableCache: Bool = true
 }
@@ -86,7 +87,8 @@ struct MetricsState {
 enum AgentRequest { case summary, recommendations, explainBudget }
 
 struct AgentState {
-    var summaryPlaceholder: String = "The assistant will analyze your spending, income, and goals to provide insights and recommendations."
+    var summaryPlaceholder: String =
+        "The assistant will analyze your spending, income, and goals to provide insights and recommendations."
 }
 
 // MARK: - App ViewModel
@@ -169,7 +171,8 @@ final class AppViewModel: ObservableObject {
             } else if tx.amount < 0 && category.isEmpty {
                 category = "Misc"
             }
-            return Transaction(merchant: tx.merchant, category: category, amount: tx.amount, date: tx.date)
+            return Transaction(
+                merchant: tx.merchant, category: category, amount: tx.amount, date: tx.date)
         }
     }
 
@@ -188,7 +191,9 @@ final class AppViewModel: ObservableObject {
     func computeMetrics() {
         let netWorth = accounts.reduce(Decimal(0)) { $0 + $1.balance }
         let income = transactions.filter { $0.amount > 0 }.reduce(Decimal(0)) { $0 + $1.amount }
-        let expenses = transactions.filter { $0.amount < 0 }.reduce(Decimal(0)) { $0 + abs($1.amount) }
+        let expenses = transactions.filter { $0.amount < 0 }.reduce(Decimal(0)) {
+            $0 + abs($1.amount)
+        }
         let totalIn = (income as NSDecimalNumber).doubleValue
         let totalOut = (expenses as NSDecimalNumber).doubleValue
         let savingsRate = totalIn == 0 ? 0 : max(0, (totalIn - totalOut) / totalIn)
@@ -210,17 +215,20 @@ final class AppViewModel: ObservableObject {
         case .summary:
             activeAlert = AppAlert(
                 title: "Summary",
-                message: "Net worth: \(metrics.netWorthFormatted)\nSavings rate: \(metrics.savingsRateFormatted)"
+                message:
+                    "Net worth: \(metrics.netWorthFormatted)\nSavings rate: \(metrics.savingsRateFormatted)"
             )
         case .recommendations:
             activeAlert = AppAlert(
                 title: "Recommendations",
-                message: "Consider increasing your emergency fund to \(metrics.emergencyTargetFormatted) and raising investment rate to \(PercentFormatter.string(from: min(0.5, metrics.investmentRate + 0.05)))."
+                message:
+                    "Consider increasing your emergency fund to \(metrics.emergencyTargetFormatted) and raising investment rate to \(PercentFormatter.string(from: min(0.5, metrics.investmentRate + 0.05)))."
             )
         case .explainBudget:
             activeAlert = AppAlert(
                 title: "Budget Policy",
-                message: "The initial budget sets a floor. Adjustments are only allowed upward to encourage savings discipline."
+                message:
+                    "The initial budget sets a floor. Adjustments are only allowed upward to encourage savings discipline."
             )
         }
     }
@@ -251,48 +259,4 @@ enum PercentFormatter {
         nf.maximumFractionDigits = 1
         return nf.string(from: NSNumber(value: value)) ?? "0%"
     }
-}
-
-// MARK: - Mock Data
-
-enum MockData {
-    static let plaidAccounts: [Account] = [
-        Account(name: "Plaid Checking", type: "Checking", balance: 4250.12),
-        Account(name: "Plaid Savings", type: "Savings", balance: 15220.49),
-        Account(name: "Plaid Brokerage", type: "Investment", balance: 28340.11),
-        Account(name: "Plaid Rewards Card", type: "Credit Card", balance: -1488.65),
-        Account(name: "Plaid Auto Loan", type: "Loan", balance: -11240.00),
-        Account(name: "Plaid Mortgage", type: "Loan", balance: -268400.00)
-    ]
-
-    static let plaidTransactions: [Transaction] = [
-        Transaction(merchant: "Employer Payroll", category: "Income", amount: 4100.00, date: Date()),
-        Transaction(merchant: "Acme Grocery", category: "", amount: -186.23, date: Date()),
-        Transaction(merchant: "Chevron Gas", category: "Transport", amount: -74.91, date: Date()),
-        Transaction(merchant: "Plaid Card Payment", category: "Credit Card", amount: -550.00, date: Date()),
-        Transaction(merchant: "Auto Loan Servicer", category: "Loan Payment", amount: -420.00, date: Date()),
-        Transaction(merchant: "Mortgage Lender", category: "Housing", amount: -1850.00, date: Date()),
-        Transaction(merchant: "Uber", category: "", amount: -31.24, date: Date()),
-        Transaction(merchant: "Savings Transfer", category: "Savings", amount: -600.00, date: Date())
-    ]
-
-    static let tellerAccounts: [Account] = [
-        Account(name: "Teller Checking", type: "Checking", balance: 2980.77),
-        Account(name: "Teller High-Yield Savings", type: "Savings", balance: 9430.18),
-        Account(name: "Teller Retirement", type: "Investment", balance: 41880.52),
-        Account(name: "Teller Travel Card", type: "Credit Card", balance: -2240.33),
-        Account(name: "Teller Student Loan", type: "Loan", balance: -18490.00),
-        Account(name: "Teller Personal Loan", type: "Loan", balance: -5200.50)
-    ]
-
-    static let tellerTransactions: [Transaction] = [
-        Transaction(merchant: "Employer Payroll", category: "Income", amount: 3950.00, date: Date()),
-        Transaction(merchant: "Whole Market Grocery", category: "", amount: -142.90, date: Date()),
-        Transaction(merchant: "Coffee Collective", category: "Dining", amount: -18.45, date: Date()),
-        Transaction(merchant: "Travel Card Payment", category: "Credit Card", amount: -700.00, date: Date()),
-        Transaction(merchant: "Student Loan Servicing", category: "Loan Payment", amount: -310.00, date: Date()),
-        Transaction(merchant: "Personal Loan Payment", category: "Loan Payment", amount: -225.50, date: Date()),
-        Transaction(merchant: "Brokerage Deposit", category: "Investment", amount: -450.00, date: Date()),
-        Transaction(merchant: "Uber", category: "", amount: -26.18, date: Date())
-    ]
 }

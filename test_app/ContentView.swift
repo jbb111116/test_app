@@ -1,5 +1,5 @@
-import SwiftUI
 import Combine
+import SwiftUI
 
 struct ContentView: View {
     @StateObject private var appViewModel: AppViewModel
@@ -18,7 +18,9 @@ struct ContentView: View {
         }
         .task { await appViewModel.startup() }
         .alert(item: $appViewModel.activeAlert) { alert in
-            Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("OK")))
+            Alert(
+                title: Text(alert.title), message: Text(alert.message),
+                dismissButton: .default(Text("OK")))
         }
     }
 }
@@ -97,8 +99,11 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         MetricRow(title: "Net Worth", value: app.metrics.netWorthFormatted)
                         MetricRow(title: "Savings Rate", value: app.metrics.savingsRateFormatted)
-                        MetricRow(title: "Investment Rate", value: app.metrics.investmentRateFormatted)
-                        MetricRow(title: "Emergency Fund Target", value: app.metrics.emergencyTargetFormatted)
+                        MetricRow(
+                            title: "Investment Rate", value: app.metrics.investmentRateFormatted)
+                        MetricRow(
+                            title: "Emergency Fund Target",
+                            value: app.metrics.emergencyTargetFormatted)
                     }
                 }
 
@@ -108,8 +113,12 @@ struct DashboardView: View {
                             .font(.callout)
                         HStack {
                             Button("Get Summary") { Task { await app.agentRequest(.summary) } }
-                            Button("Recommendations") { Task { await app.agentRequest(.recommendations) } }
-                            Button("Explain Budget") { Task { await app.agentRequest(.explainBudget) } }
+                            Button("Recommendations") {
+                                Task { await app.agentRequest(.recommendations) }
+                            }
+                            Button("Explain Budget") {
+                                Task { await app.agentRequest(.explainBudget) }
+                            }
                         }
                     }
                 }
@@ -123,7 +132,11 @@ struct MetricRow: View {
     let title: String
     let value: String
     var body: some View {
-        HStack { Text(title); Spacer(); Text(value).monospacedDigit() }
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value).monospacedDigit()
+        }
     }
 }
 
@@ -196,21 +209,33 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Picker("API Provider", selection: Binding(get: { app.config.apiProvider }, set: { newProvider in
-                app.config.apiProvider = newProvider
-                Task {
-                    await app.refreshData()
-                    app.computeMetrics()
-                }
-            })) {
+            Picker(
+                "API Provider",
+                selection: Binding(
+                    get: { app.config.apiProvider },
+                    set: { newProvider in
+                        app.config.apiProvider = newProvider
+                        Task {
+                            await app.refreshData()
+                            app.computeMetrics()
+                        }
+                    })
+            ) {
+                Text("Mock").tag(APIProvider.mock)
                 Text("Plaid").tag(APIProvider.plaid)
                 Text("Teller").tag(APIProvider.teller)
             }
             Text("Switch providers to load provider-specific mock accounts and transactions.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Toggle("Verbose Logging", isOn: Binding(get: { app.config.verboseLogging }, set: { app.config.verboseLogging = $0 }))
-            Toggle("Enable Cache", isOn: Binding(get: { app.config.enableCache }, set: { app.config.enableCache = $0 }))
+            Toggle(
+                "Verbose Logging",
+                isOn: Binding(
+                    get: { app.config.verboseLogging }, set: { app.config.verboseLogging = $0 }))
+            Toggle(
+                "Enable Cache",
+                isOn: Binding(get: { app.config.enableCache }, set: { app.config.enableCache = $0 })
+            )
         }
         .padding()
     }

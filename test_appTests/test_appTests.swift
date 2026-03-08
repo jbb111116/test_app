@@ -20,14 +20,26 @@ struct test_appTests {
         )
 
         let config = AppConfig()
-        config.apiProvider = .teller
+        config.apiProvider = .mock
         let viewModel = AppViewModel(config: config, dependencies: dependencies)
 
         await viewModel.refreshData()
 
-        #expect(selectedProvider == .teller)
+        #expect(selectedProvider == .mock)
         #expect(viewModel.accounts.count == 1)
         #expect(viewModel.transactions.first?.category == "Misc")
+    }
+
+    @Test func mockProvider_returnsRichDataset() async {
+        let viewModel = AppViewModel(dependencies: .test)
+        viewModel.config.apiProvider = .mock
+
+        await viewModel.refreshData()
+
+        #expect(viewModel.accounts.count >= 5)
+        #expect(viewModel.accounts.contains(where: { $0.type == "Credit Card" }))
+        #expect(viewModel.accounts.contains(where: { $0.type == "Loan" }))
+        #expect(!viewModel.transactions.isEmpty)
     }
 
     @Test func computeMetrics_calculatesExpectedValues() {
@@ -87,11 +99,96 @@ struct test_appTests {
         #expect(viewModel.transactions[2].category == "Misc")
         #expect(viewModel.transactions[3].category == "Utilities")
     }
+
+    @Test func plaidProvider_missingConfig_setsDataErrorAlert() async {
+        let dependencies = AppDependencies(
+            makeBankingAPI: { _ in
+                PlaidAPI(sdkClient: PlaidSDKStubClient(configuration: nil))
+            },
+            cacheStore: InMemoryCacheStore(),
+            makeLogger: { _ in TestLogger() }
+        )
+
+        let config = AppConfig()
+        config.apiProvider = .plaid
+        let viewModel = AppViewModel(config: config, dependencies: dependencies)
+
+        await viewModel.refreshData()
+
+        #expect(viewModel.activeAlert?.title == "Data Error")
+        #expect(viewModel.activeAlert?.message.contains("Missing configuration") == true)
+    }
+
+    @Test func plaidProvider_authFailure_setsDataErrorAlert() async {
+        let dependencies = AppDependencies(
+            makeBankingAPI: { _ in
+                PlaidAPI(sdkClient: AuthFailingPlaidClient())
+            },
+            cacheStore: InMemoryCacheStore(),
+            makeLogger: { _ in TestLogger() }
+        )
+
+        let config = AppConfig()
+        config.apiProvider = .plaid
+        let viewModel = AppViewModel(config: config, dependencies: dependencies)
+
+        await viewModel.refreshData()
+
+        #expect(viewModel.activeAlert?.title == "Data Error")
+        #expect(viewModel.activeAlert?.message.contains("authentication failed") == true)
+    }
+
+    @Test func tellerProvider_timeout_setsDataErrorAlert() async {
+        let dependencies = AppDependencies(
+            makeBankingAPI: { _ in
+                TellerAPI(sdkClient: TimeoutTellerClient())
+            },
+            cacheStore: InMemoryCacheStore(),
+            makeLogger: { _ in TestLogger() }
+        )
+
+        let config = AppConfig()
+        config.apiProvider = .teller
+        let viewModel = AppViewModel(config: config, dependencies: dependencies)
+
+        await viewModel.refreshData()
+
+        #expect(viewModel.activeAlert?.title == "Data Error")
+        #expect(viewModel.activeAlert?.message.contains("timed out") == true)
+    }
+
+    @Test func tellerProvider_rateLimited_setsDataErrorAlert() async {
+        let dependencies = AppDependencies(
+            makeBankingAPI: { _ in
+                TellerAPI(sdkClient: RateLimitedTellerClient())
+            },
+            cacheStore: InMemoryCacheStore(),
+            makeLogger: { _ in TestLogger() }
+        )
+
+        let config = AppConfig()
+        config.apiProvider = .teller
+        let viewModel = AppViewModel(config: config, dependencies: dependencies)
+
+        await viewModel.refreshData()
+
+        #expect(viewModel.activeAlert?.title == "Data Error")
+        #expect(viewModel.activeAlert?.message.contains("rate limit") == true)
+    }
 }
 
 private extension AppDependencies {
     static let test = AppDependencies(
-        makeBankingAPI: { _ in MockBankingAPI(accounts: [], transactions: []) },
+        makeBankingAPI: { provider in
+            switch provider {
+            case .mock:
+                return MockAPI()
+            case .plaid:
+                return PlaidAPI(sdkClient: PlaidSDKStubClient(configuration: nil))
+            case .teller:
+                return TellerAPI(sdkClient: TellerSDKStubClient(configuration: nil))
+            }
+        },
         cacheStore: InMemoryCacheStore(),
         makeLogger: { _ in TestLogger() }
     )
@@ -107,6 +204,24 @@ private struct MockBankingAPI: BankingAPI {
 
     func fetchTransactions() async throws -> [Transaction] {
         transactions
+    }
+}
+
+private struct AuthFailingPlaidClient: PlaidSDKClient {
+    func createLinkToken() async throws -> String {
+        throw BankingIntegrationError.authenticationFailed(provider: .plaid)
+    }
+}
+
+private struct TimeoutTellerClient: TellerSDKClient {
+    func createEnrollmentToken() async throws -> String {
+        throw BankingIntegrationError.timeout(provider: .teller)
+    }
+}
+
+private struct RateLimitedTellerClient: TellerSDKClient {
+    func createEnrollmentToken() async throws -> String {
+        throw BankingIntegrationError.rateLimited(provider: .teller)
     }
 }
 

@@ -10,6 +10,8 @@ struct AppDependencies {
             let configurationProvider = BundleIntegrationConfigurationProvider()
 
             switch provider {
+            case .mock:
+                return MockAPI()
             case .plaid:
                 let plaidConfig = PlaidConfiguration.from(configurationProvider)
                 let plaidStub = PlaidSDKStubClient(configuration: plaidConfig)
